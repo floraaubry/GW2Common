@@ -1,5 +1,4 @@
 Push-Location "$PSScriptRoot/../.."
-
 $dirty = $false
 $uncommittedChanges = (git status -s).Length -gt 0
 $revs = git rev-list --tags --max-count=1
@@ -13,15 +12,14 @@ if($LASTEXITCODE -ne 0) {
     $dirty = $tagHash -ne $currentHash
     $dirty = $dirty -or $uncommittedChanges
 }
-
-$gitVer = $latestTag.Replace('.', ',').Substring(0, $latestTag.IndexOf('-')).Substring(1)
+$tagBase = if($latestTag.Contains('-')) { $latestTag.Substring(0, $latestTag.IndexOf('-')) } else { $latestTag }
+$gitVer = $tagBase.Replace('.', ',').Substring(1)
 $fixVer = "9999"
 if($latestTag.Contains("-pre"))
 {
     $fixVer = $latestTag.Substring($latestTag.IndexOf("-pre") + 4)
 }
 $gitVer += "," + ($dirty ? $fixVer : "0")
-
 $dirtySuffix = ""
 if($dirty)
 {
@@ -32,8 +30,6 @@ if($dirty)
     }
     $dirtySuffix += ")"
 }
-
 $gitVerStr = $latestTag.Substring(1) + $dirtySuffix
-
 Write-Output "#define GIT_VER $gitVer
 #define GIT_VER_STR ""$gitVerStr\0""" > include/Version.h
