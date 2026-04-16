@@ -508,7 +508,7 @@ void Input::SendKeybind(const KeyCombo& ks, const std::optional<Point>& cursorPo
         i.ignoreChat = ignoreChat;
         if(i.wParam != 0)
             queuedInputs_.push_back(i);
-        currentTime += 20;
+        currentTime += 1;
     };
 
     if(NotNone(action & KeybindAction::Down)) {
@@ -517,7 +517,7 @@ void Input::SendKeybind(const KeyCombo& ks, const std::optional<Point>& cursorPo
     }
 
     if(action == KeybindAction::Both)
-        currentTime += 50;
+        currentTime += 5;
 
     if(NotNone(action & KeybindAction::Up)) {
         for(const auto& sc : reverse(codes))
