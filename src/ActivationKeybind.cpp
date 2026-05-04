@@ -1,19 +1,20 @@
 ﻿#include "ActivationKeybind.h"
-
 #include "Input.h"
 
-ActivationKeybind::~ActivationKeybind() {
+ActivationKeybind::~ActivationKeybind()
+{
     Input::f([&](auto& i) { i.UnregisterKeybind(this); });
 }
 
-void ActivationKeybind::Bind() {
-    if(NotNone(key_))
-        Input::i().RegisterKeybind(this);
+void ActivationKeybind::Bind()
+{
+    for (const auto& kc : keyCombos_)
+        if (NotNone(kc.key()))
+            Input::i().RegisterKeybind(this, kc);
 }
 
-void ActivationKeybind::Rebind() {
-    if(NotNone(key_))
-        Input::i().UpdateKeybind(this);
-    else
-        Input::i().UnregisterKeybind(this);
+void ActivationKeybind::Rebind()
+{
+    Input::i().UnregisterKeybind(this);
+    Bind();
 }

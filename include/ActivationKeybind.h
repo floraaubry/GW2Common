@@ -29,7 +29,7 @@ public:
 
     [[nodiscard]] bool conditionsFulfilled() const { return conditions_ == nullptr || conditions_->passes(); }
     [[nodiscard]] i32 conditionsScore() const { return conditions_ == nullptr ? 0 : conditions_->score(); }
-    [[nodiscard]] i32 keysScore() const { return std::popcount(ToUnderlying(mod_)); }
+    [[nodiscard]] i32 keysScore() const { return keyCombos_.empty() ? 0 : std::popcount(ToUnderlying(keyCombos_[0].mod())); }
 
 protected:
     void ApplyKeys() override {

@@ -182,7 +182,7 @@ protected:
 
     std::unordered_map<KeyCombo, std::vector<ActivationKeybind*>> keybinds_;
     ActivationKeybind* activeKeybind_ = nullptr;
-    void RegisterKeybind(ActivationKeybind* kb);
+    void RegisterKeybind(ActivationKeybind* kb, const KeyCombo& kc);
     void UpdateKeybind(ActivationKeybind* kb);
     void UnregisterKeybind(ActivationKeybind* kb);
 

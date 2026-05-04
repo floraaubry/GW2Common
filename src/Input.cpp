@@ -127,16 +127,30 @@ bool Input::OnInput(UINT& msg, WPARAM& wParam, LPARAM& lParam) {
     }
 
     InputResponse response = preventMouseButton ? InputResponse::PreventMouse : InputResponse::PassToGame;
-    if(inputRecordCallback_ && eventKey.sc != ScanCode::None) {
+    if (inputRecordCallback_ && eventKey.sc != ScanCode::None)
+    {
         response |= InputResponse::PreventKeyboard;
-        if(eventKey.sc != ScanCode::LButton) {
+        if (eventKey.sc != ScanCode::LButton)
+        {
             auto m = downModifiers_;
-            if(!eventKey.down && IsModifier(eventKey.sc)) {
+            if (!eventKey.down && IsModifier(eventKey.sc))
+            {
                 m &= ~ToModifier(eventKey.sc);
             }
-            (*inputRecordCallback_)(KeyCombo(eventKey.sc, m), !eventKey.down);
-            if(!eventKey.down)
+
+            bool isFinal = !eventKey.down;
+            if (isFinal)
+            {
+                // Extract the callback and clear BEFORE calling it,
+                // so any BeginRecordInputs() call inside the callback survives.
+                auto cb              = std::move(*inputRecordCallback_);
                 inputRecordCallback_ = std::nullopt;
+                cb(KeyCombo(eventKey.sc, m), true);
+            }
+            else
+            {
+                (*inputRecordCallback_)(KeyCombo(eventKey.sc, m), false);
+            }
         }
     }
 
@@ -312,10 +326,11 @@ void Input::UnblockKeybinds(u32 id) {
     LogInfo("Unblocking keybinds, flag {} -> {}", old, blockKeybinds_);
 }
 
-PassToGame Input::TriggerKeybinds(const EventKey& ek) {
+PassToGame Input::TriggerKeybinds(const EventKey& ek)
+{
 #ifdef _DEBUG
-    auto dbgkeys = EventKeyToString(ek, downModifiers_);
-    Log::i().Print(Severity::Debug, L"Triggering keybinds, active keys: {}", dbgkeys);
+    auto dbgKeys = EventKeyToString(ek, downModifiers_);
+    Log::i().Print(Severity::Debug, L"Triggering keybinds, active keys: {}", dbgKeys);
 #endif
 
     // Key is pressed  => use it as main key
@@ -325,30 +340,43 @@ PassToGame Input::TriggerKeybinds(const EventKey& ek) {
 
     struct
     {
-        i32 condiScore = -1;
-        i32 keyScore = -1;
-        ActivationKeybind* kb = nullptr;
+        i32                condiScore = -1;
+        i32                keyScore   = -1;
+        ActivationKeybind* kb         = nullptr;
     } bestKeybind;
-    bool activeKeybindDeactivated =
-        activeKeybind_ && !ek.down && (ek.sc == activeKeybind_->key() || NotNone(ToModifier(ek.sc) & activeKeybind_->modifier()));
-    if(activeKeybind_ && !activeKeybindDeactivated) {
+
+    // Check if the active keybind is being released — test against all its combos
+    bool activeKeybindDeactivated = activeKeybind_ && !ek.down && [&]()
+    {
+        for (const auto& activekc : activeKeybind_->keyCombos())
+            if (ek.sc == activekc.key() || NotNone(ToModifier(ek.sc) & activekc.mod()))
+                return true;
+        return false;
+    }();
+
+    if (activeKeybind_ && !activeKeybindDeactivated)
+    {
         LogInfo("Best candidate keybind set to prior active keybind '{}'", activeKeybind_->nickname());
-        bestKeybind = { activeKeybind_->conditionsScore(), activeKeybind_->keysScore(), activeKeybind_ };
+        bestKeybind = { .condiScore = activeKeybind_->conditionsScore(), .keyScore = activeKeybind_->keysScore(), .kb = activeKeybind_ };
     }
 
-    if(ek.down) {
-        for(auto& kb : keybinds_[kc]) {
-            if(kb->conditionsFulfilled()) {
+    if (ek.down)
+    {
+        for (auto& kb : keybinds_[kc])
+        {
+            if (kb->conditionsFulfilled())
+            {
                 i32 condiScore = kb->conditionsScore();
-                i32 keyScore = kb->keysScore();
-                if(condiScore > bestKeybind.condiScore || condiScore == bestKeybind.condiScore && keyScore > bestKeybind.keyScore)
-                    bestKeybind = { condiScore, keyScore, kb };
+                i32 keyScore   = kb->keysScore();
+                if (condiScore > bestKeybind.condiScore || condiScore == bestKeybind.condiScore && keyScore > bestKeybind.keyScore)
+                    bestKeybind = { .condiScore = condiScore, .keyScore = keyScore, .kb = kb };
             }
         }
 
-        if(bestKeybind.kb && bestKeybind.kb != activeKeybind_) {
-            if(activeKeybind_ != nullptr)
-                activeKeybind_->callback()(Activated::No);
+        if (bestKeybind.kb && bestKeybind.kb != activeKeybind_)
+        {
+            if (activeKeybind_ != nullptr)
+                std::ignore = activeKeybind_->callback()(Activated::No);
             activeKeybind_ = bestKeybind.kb;
 
 #ifdef _DEBUG
@@ -358,8 +386,9 @@ PassToGame Input::TriggerKeybinds(const EventKey& ek) {
             return activeKeybind_->callback()(Activated::Yes);
         }
     }
-    else if(activeKeybindDeactivated) {
-        activeKeybind_->callback()(Activated::No);
+    else if (activeKeybindDeactivated)
+    {
+        std::ignore    = activeKeybind_->callback()(Activated::No);
         activeKeybind_ = nullptr;
 #ifdef _DEBUG
         LogInfo("Active keybind is now null");
@@ -562,20 +591,25 @@ void Input::SendQueuedInputs() {
     queuedInputs_.pop_front();
 }
 
-void Input::RegisterKeybind(ActivationKeybind* kb) { keybinds_[kb->keyCombo()].push_back(kb); }
+void Input::RegisterKeybind(ActivationKeybind* kb, const KeyCombo& kc) {
+    keybinds_[kc].push_back(kb);
+}
 
 void Input::UpdateKeybind(ActivationKeybind* kb) {
     UnregisterKeybind(kb);
-    RegisterKeybind(kb);
+    for (const auto& kc : kb->keyCombos())
+        if (NotNone(kc.key()))
+            RegisterKeybind(kb, kc);
 }
 
 void Input::UnregisterKeybind(ActivationKeybind* kb) {
-    if(activeKeybind_ == kb)
+    if (activeKeybind_ == kb)
         activeKeybind_ = nullptr;
 
-    for(auto& [kc, vec] : keybinds_) {
-        auto it = std::remove(vec.begin(), vec.end(), kb);
-        if(it != vec.end())
+    for (auto& vec : keybinds_ | std::views::values)
+    {
+        auto it = std::ranges::remove(vec, kb).begin();
+        if (it != vec.end())
             vec.erase(it);
     }
 }
